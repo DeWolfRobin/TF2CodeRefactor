@@ -1,7 +1,6 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
 //
-// Purpose: 
-//
+// Purpose: Functions to generate items as full game entities.
 //=============================================================================
 
 #include "cbase.h"
@@ -19,176 +18,153 @@
 #include "c_tf_player.h"
 #endif // TF_CLIENT_DLL
 
-//==================================================================================
-// GENERATION SYSTEM
-//==================================================================================
+//----------------------------------------------------------------------------------
+// Global item generation system instance.
+//----------------------------------------------------------------------------------
 CItemGeneration g_ItemGenerationSystem;
-CItemGeneration *ItemGeneration( void )
+CItemGeneration* ItemGeneration(void)
 {
-	return &g_ItemGenerationSystem;
+    return &g_ItemGenerationSystem;
 }
 
 //-----------------------------------------------------------------------------
-// Constructor, destructor
+// Constructor
 //-----------------------------------------------------------------------------
-CItemGeneration::CItemGeneration( void )
+CItemGeneration::CItemGeneration(void)
 {
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Generate a random item matching the specified criteria
+// GenerateRandomItem: Returns a randomly chosen item entity based on criteria.
 //-----------------------------------------------------------------------------
-CBaseEntity *CItemGeneration::GenerateRandomItem( CItemSelectionCriteria *pCriteria, const Vector &vecOrigin, const QAngle &vecAngles, const char* pszOverrideClassName )
+CBaseEntity* CItemGeneration::GenerateRandomItem(CItemSelectionCriteria* pCriteria, const Vector& vecOrigin, const QAngle& vecAngles, const char* pszOverrideClassName)
 {
-	entityquality_t iQuality;
-	int iChosenItem = ItemSystem()->GenerateRandomItem( pCriteria, &iQuality );
-	if ( iChosenItem == INVALID_ITEM_DEF_INDEX )
-		return NULL;
+    entityquality_t iQuality;
+    int iChosenItem = ItemSystem()->GenerateRandomItem(pCriteria, &iQuality);
+    if (iChosenItem == INVALID_ITEM_DEF_INDEX)
+        return nullptr;
 
-	return SpawnItem( iChosenItem, vecOrigin, vecAngles, pCriteria->GetItemLevel(), iQuality, pszOverrideClassName );
+    return SpawnItem(iChosenItem, vecOrigin, vecAngles, pCriteria->GetItemLevel(), iQuality, pszOverrideClassName);
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Generate a random item matching the specified definition index
+// GenerateItemFromDefIndex: Spawns an item given its definition index.
 //-----------------------------------------------------------------------------
-CBaseEntity *CItemGeneration::GenerateItemFromDefIndex( int iDefIndex, const Vector &vecOrigin, const QAngle &vecAngles )
+CBaseEntity* CItemGeneration::GenerateItemFromDefIndex(int iDefIndex, const Vector& vecOrigin, const QAngle& vecAngles)
 {
-	return SpawnItem( iDefIndex, vecOrigin, vecAngles, 1, AE_UNIQUE, NULL );
+    return SpawnItem(iDefIndex, vecOrigin, vecAngles, 1, AE_UNIQUE, nullptr);
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Generate an item from the specified item data
+// GenerateItemFromScriptData: Spawns an item based on pre-populated item data.
 //-----------------------------------------------------------------------------
-CBaseEntity *CItemGeneration::GenerateItemFromScriptData( const CEconItemView *pData, const Vector &vecOrigin, const QAngle &vecAngles, const char *pszOverrideClassName )
+CBaseEntity* CItemGeneration::GenerateItemFromScriptData(const CEconItemView* pData, const Vector& vecOrigin, const QAngle& vecAngles, const char* pszOverrideClassName)
 {
-	return SpawnItem( pData, vecOrigin, vecAngles, pszOverrideClassName );
+    return SpawnItem(pData, vecOrigin, vecAngles, pszOverrideClassName);
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Generate the base item for a class's loadout slot 
+// GenerateBaseItem: Generates the base item for a class's loadout slot.
 //-----------------------------------------------------------------------------
-CBaseEntity *CItemGeneration::GenerateBaseItem( struct baseitemcriteria_t *pCriteria )
+CBaseEntity* CItemGeneration::GenerateBaseItem(struct baseitemcriteria_t* pCriteria)
 {
-	int iChosenItem = ItemSystem()->GenerateBaseItem( pCriteria );
-	if ( iChosenItem == INVALID_ITEM_DEF_INDEX )
-		return NULL;
+    int iChosenItem = ItemSystem()->GenerateBaseItem(pCriteria);
+    if (iChosenItem == INVALID_ITEM_DEF_INDEX)
+        return nullptr;
 
-	return SpawnItem( iChosenItem, vec3_origin, vec3_angle, 1, AE_NORMAL, NULL );
+    return SpawnItem(iChosenItem, vec3_origin, vec3_angle, 1, AE_NORMAL, nullptr);
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Create a new instance of the chosen item
+// SpawnItem (by definition index): Creates a new entity based on item definition index.
 //-----------------------------------------------------------------------------
-CBaseEntity *CItemGeneration::SpawnItem( int iChosenItem, const Vector &vecAbsOrigin, const QAngle &vecAbsAngles, int iItemLevel, entityquality_t entityQuality, const char *pszOverrideClassName )
+CBaseEntity* CItemGeneration::SpawnItem(int iChosenItem, const Vector& vecAbsOrigin, const QAngle& vecAbsAngles, int iItemLevel, entityquality_t entityQuality, const char* pszOverrideClassName)
 {
-	CEconItemDefinition *pData = ItemSystem()->GetStaticDataForItemByDefIndex( iChosenItem );
-	if ( !pData )
-		return NULL;
+    CEconItemDefinition* pData = ItemSystem()->GetStaticDataForItemByDefIndex(iChosenItem);
+    if (!pData)
+        return nullptr;
 
-	CBaseEntity* pItem = NULL;
+    CBaseEntity* pItem = nullptr;
+    // Try override classname first.
+    if (pszOverrideClassName)
+        pItem = CreateEntityByName(pszOverrideClassName);
 
-	// Josh: Attempt to spawn with a pszOverrideClassName, otherwise, fallback
-	// to the ItemClass of the EconItemDefinition.
-	//
-	// pszOverrideClassName exists now because of a fatal problem
-	// related to disguising as classes with generic weapons (ie. stock shotgun)
-	// where the item script calls the class name tf_weapon_shotgun (unlocalized for the class)
-	// which doesn't exist, but we already know on the outer caller what the classname is, passed
-	// in via pszOverrideClassName.
-	if ( pszOverrideClassName )
-		pItem = CreateEntityByName( pszOverrideClassName );
+    // Fall back to the item class from the definition.
+    if (!pItem)
+    {
+        pszOverrideClassName = pData->GetItemClass();
+        if (!pszOverrideClassName)
+            return nullptr;
+        pItem = CreateEntityByName(pszOverrideClassName);
+    }
+    if (!pItem)
+        return nullptr;
 
-	if ( !pItem )
-	{
-		pszOverrideClassName = pData->GetItemClass();
-
-		if ( !pszOverrideClassName )
-			return NULL;
-
-		pItem = CreateEntityByName( pszOverrideClassName );
-	}
-
-	if ( !pItem )
-		return NULL;
-
-	// Set the item level & quality
-	IHasAttributes *pItemInterface = GetAttribInterface( pItem );
-	Assert( pItemInterface );
-	if ( pItemInterface )
-	{
-		// Setup the script item. Don't generate attributes here, because it'll be done during entity spawn.
-		CEconItemView *pScriptItem = pItemInterface->GetAttributeContainer()->GetItem();
-		pScriptItem->Init( iChosenItem, entityQuality, iItemLevel, false );
-	}
-
-	return PostSpawnItem( pItem, pItemInterface, vecAbsOrigin, vecAbsAngles );
+    IHasAttributes* pItemInterface = GetAttribInterface(pItem);
+    Assert(pItemInterface);
+    if (pItemInterface)
+    {
+        CEconItemView* pScriptItem = pItemInterface->GetAttributeContainer()->GetItem();
+        pScriptItem->Init(iChosenItem, entityQuality, iItemLevel, false);
+    }
+    return PostSpawnItem(pItem, pItemInterface, vecAbsOrigin, vecAbsAngles);
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Create a base entity for the specified item data
+// SpawnItem (by item data): Creates a new entity using pre-initialized item data.
 //-----------------------------------------------------------------------------
-CBaseEntity *CItemGeneration::SpawnItem( const CEconItemView *pData, const Vector &vecAbsOrigin, const QAngle &vecAbsAngles, const char *pszOverrideClassName )
+CBaseEntity* CItemGeneration::SpawnItem(const CEconItemView* pData, const Vector& vecAbsOrigin, const QAngle& vecAbsAngles, const char* pszOverrideClassName)
 {
-	if ( !pData->GetStaticData() )
-		return NULL;
+    if (!pData->GetStaticData())
+        return nullptr;
 
-	if ( !pszOverrideClassName )
-	{
-		pszOverrideClassName = pData->GetStaticData()->GetItemClass();
-	}
+    if (!pszOverrideClassName)
+        pszOverrideClassName = pData->GetStaticData()->GetItemClass();
 
-	if ( !pszOverrideClassName )
-		return NULL;
+    if (!pszOverrideClassName)
+        return nullptr;
 
-	CBaseEntity *pItem = CreateEntityByName( pszOverrideClassName );
-	if ( !pItem )
-		return NULL;
+    CBaseEntity* pItem = CreateEntityByName(pszOverrideClassName);
+    if (!pItem)
+        return nullptr;
 
-	// Set the item level & quality
-	IHasAttributes *pItemInterface = GetAttribInterface( pItem );
-	Assert( pItemInterface );
-	if ( pItemInterface )
-	{
-		pItemInterface->GetAttributeContainer()->SetItem( pData );
-	}
-
-	return PostSpawnItem( pItem, pItemInterface, vecAbsOrigin, vecAbsAngles );
+    IHasAttributes* pItemInterface = GetAttribInterface(pItem);
+    Assert(pItemInterface);
+    if (pItemInterface)
+    {
+        pItemInterface->GetAttributeContainer()->SetItem(pData);
+    }
+    return PostSpawnItem(pItem, pItemInterface, vecAbsOrigin, vecAbsAngles);
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// PostSpawnItem: Finalizes the spawned item (origin/angles, spawn, activate).
 //-----------------------------------------------------------------------------
-CBaseEntity *CItemGeneration::PostSpawnItem( CBaseEntity *pItem, IHasAttributes *pItemInterface, const Vector &vecAbsOrigin, const QAngle &vecAbsAngles )
+CBaseEntity* CItemGeneration::PostSpawnItem(CBaseEntity* pItem, IHasAttributes* pItemInterface, const Vector& vecAbsOrigin, const QAngle& vecAbsAngles)
 {
 #ifdef CLIENT_DLL
-	const char *pszPlayerModel = NULL;
-	if ( pItemInterface )
-	{
-		CEconItemView *pScriptItem = pItemInterface->GetAttributeContainer()->GetItem();
-		
-		int iClass = 0;
-		int iTeam = 0;
+    const char* pszPlayerModel = nullptr;
+    if (pItemInterface)
+    {
+        CEconItemView* pScriptItem = pItemInterface->GetAttributeContainer()->GetItem();
+        int iClass = 0, iTeam = 0;
 #ifdef TF_CLIENT_DLL
-		C_TFPlayer *pTFPlayer = ToTFPlayer( GetPlayerByAccountID( pScriptItem->GetAccountID() ) );
-		if ( pTFPlayer )
-		{
-			iClass = pTFPlayer->GetPlayerClass()->GetClassIndex();
-			iTeam = pTFPlayer->GetTeamNumber();
-		}
-#endif // TF_CLIENT_DLL
-		pszPlayerModel = pScriptItem->GetPlayerDisplayModel( iClass, iTeam );
-	}
+        C_TFPlayer* pTFPlayer = ToTFPlayer(GetPlayerByAccountID(pScriptItem->GetAccountID()));
+        if (pTFPlayer)
+        {
+            iClass = pTFPlayer->GetPlayerClass()->GetClassIndex();
+            iTeam = pTFPlayer->GetTeamNumber();
+        }
+#endif
+        pszPlayerModel = pScriptItem->GetPlayerDisplayModel(iClass, iTeam);
+    }
+    if (!pItem->InitializeAsClientEntity(pszPlayerModel, RENDER_GROUP_OPAQUE_ENTITY))
+        return nullptr;
+#endif
 
-	// If we create a clientside item, we need to force it to initialize attributes
-	if ( pItem->InitializeAsClientEntity( pszPlayerModel, RENDER_GROUP_OPAQUE_ENTITY ) == false )
-		return NULL;
-#endif // CLIENT_DLL
-
-	pItem->SetAbsOrigin( vecAbsOrigin );
-	pItem->SetAbsAngles( vecAbsAngles );
-
-	pItem->Spawn();
-	pItem->Activate();
-	return pItem;
+    pItem->SetAbsOrigin(vecAbsOrigin);
+    pItem->SetAbsAngles(vecAbsAngles);
+    pItem->Spawn();
+    pItem->Activate();
+    return pItem;
 }
-
