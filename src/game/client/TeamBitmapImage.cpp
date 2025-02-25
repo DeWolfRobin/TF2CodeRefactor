@@ -17,39 +17,46 @@
 #include "tier0/memdbgon.h"
 
 //-----------------------------------------------------------------------------
-// A multiplexer bitmap that chooses a bitmap based on team
+// CTeamBitmapImage: A multiplexer bitmap that chooses a bitmap based on team.
 //-----------------------------------------------------------------------------
-CTeamBitmapImage::CTeamBitmapImage() : m_Alpha(1.0f)
+
+CTeamBitmapImage::CTeamBitmapImage() : m_Alpha(1.0f), m_pEntity(nullptr), m_bRelativeTeams(false)
 {
-	memset( m_ppImage, 0, BITMAP_COUNT * sizeof(BitmapImage*) );
-	m_pEntity = NULL;
-	m_bRelativeTeams = 0;
+	// Initialize our bitmap pointer array to nullptr.
+	for (int i = 0; i < BITMAP_COUNT; ++i)
+	{
+		m_ppImage[i] = nullptr;
+	}
 }
 
 CTeamBitmapImage::~CTeamBitmapImage()
 {
-	int i;
-	for ( i = 0; i < BITMAP_COUNT; ++i )
+	// Delete any allocated BitmapImage objects.
+	for (int i = 0; i < BITMAP_COUNT; ++i)
 	{
 		if (m_ppImage[i])
+		{
 			delete m_ppImage[i];
+			m_ppImage[i] = nullptr;
+		}
 	}
 }
 
 
 //-----------------------------------------------------------------------------
-// initialization
+// Initialization: Sets up team bitmaps based on KeyValues data.
 //-----------------------------------------------------------------------------
-bool CTeamBitmapImage::Init( vgui::Panel *pParent, KeyValues* pInitData, C_BaseEntity* pEntity )
+bool CTeamBitmapImage::Init(vgui::Panel* pParent, KeyValues* pInitData, C_BaseEntity* pEntity)
 {
-	static const char *pRelativeTeamNames[BITMAP_COUNT] = 
+	// Static team names for relative and absolute teams.
+	static const char* pRelativeTeamNames[BITMAP_COUNT] =
 	{
 		"NoTeam",
 		"MyTeam",
 		"EnemyTeam",
 	};
 
-	static const char *pAbsoluteTeamNames[BITMAP_COUNT] = 
+	static const char* pAbsoluteTeamNames[BITMAP_COUNT] =
 	{
 		"Team0",
 		"Team1",
@@ -57,33 +64,36 @@ bool CTeamBitmapImage::Init( vgui::Panel *pParent, KeyValues* pInitData, C_BaseE
 	};
 
 	m_pEntity = pEntity;
-	m_bRelativeTeams = (pInitData->GetInt( "relativeteam" ) != 0);
+	m_bRelativeTeams = (pInitData->GetInt("relativeteam") != 0);
 
-	const char **ppTeamNames = m_bRelativeTeams ? pRelativeTeamNames : pAbsoluteTeamNames;
+	// Choose the appropriate set of team names.
+	const char** ppTeamNames = m_bRelativeTeams ? pRelativeTeamNames : pAbsoluteTeamNames;
 
-	int i;
-	for ( i = 0 ; i < BITMAP_COUNT; ++i )
+	for (int i = 0; i < BITMAP_COUNT; ++i)
 	{
-		// Default to null
-		m_ppImage[i] = NULL;
+		// Default image pointer to nullptr.
+		m_ppImage[i] = nullptr;
 
-		// Look for team section
-		KeyValues *pTeamKV = pInitData->FindKey( ppTeamNames[i] );
-		if ( !pTeamKV )
+		// Look for a team section in the KeyValues data.
+		KeyValues* pTeamKV = pInitData->FindKey(ppTeamNames[i]);
+		if (!pTeamKV)
 			continue;
 
-		char const* pClassImage = pTeamKV->GetString( "material" );
-		if ( !pClassImage || !pClassImage[ 0 ] )
+		// Retrieve the material name for this team.
+		const char* pClassImage = pTeamKV->GetString("material");
+		if (!pClassImage || !pClassImage[0])
 			return false;
 
-		// modulation color
+		// Get the modulation color; default to white if not provided.
 		Color color;
-		if (!ParseRGBA( pTeamKV, "color", color ))
-			color.SetColor( 255, 255, 255, 255 );
+		if (!ParseRGBA(pTeamKV, "color", color))
+		{
+			color.SetColor(255, 255, 255, 255);
+		}
 
-		// hook in the bitmap
-		m_ppImage[i] = new BitmapImage( pParent->GetVPanel(), pClassImage );
-		m_ppImage[i]->SetColor( color );
+		// Create the bitmap image and set its color.
+		m_ppImage[i] = new BitmapImage(pParent->GetVPanel(), pClassImage);
+		m_ppImage[i]->SetColor(color);
 	}
 
 	return true;
@@ -91,82 +101,83 @@ bool CTeamBitmapImage::Init( vgui::Panel *pParent, KeyValues* pInitData, C_BaseE
 
 
 //-----------------------------------------------------------------------------
-// Alpha modulate...
+// SetAlpha: Sets the overall alpha modulation (clamped between 0 and 1).
 //-----------------------------------------------------------------------------
-void CTeamBitmapImage::SetAlpha( float alpha )
+void CTeamBitmapImage::SetAlpha(float alpha)
 {
-	m_Alpha = clamp( alpha, 0.0f, 1.0f );
+	m_Alpha = clamp(alpha, 0.0f, 1.0f);
 }
 
 
 //-----------------------------------------------------------------------------
-// draw
+// Paint: Renders the appropriate team bitmap with alpha modulation.
 //-----------------------------------------------------------------------------
-void CTeamBitmapImage::Paint( float yaw /*= 0.0f*/ )
+void CTeamBitmapImage::Paint(float yaw /* = 0.0f */)
 {
-	if (m_Alpha == 0.0f)
+	if (m_Alpha <= 0.0f)
 		return;
 
+	// Cache the entity pointer to avoid redundant calls.
+	C_BaseEntity* pEntity = GetEntity();
 	int team = 0;
-	if (m_bRelativeTeams)
+	if (pEntity)
 	{
-		if (GetEntity())
+		if (m_bRelativeTeams)
 		{
-			if (GetEntity()->GetTeamNumber() != 0)
+			// If the entity has a team, choose relative team based on local team membership.
+			if (pEntity->GetTeamNumber() != 0)
 			{
-				team = GetEntity()->InLocalTeam() ? 1 : 2;
+				team = pEntity->InLocalTeam() ? 1 : 2;
 			}
-		}
-	}
-	else
-	{
-		if (GetEntity())
-			team = GetEntity()->GetTeamNumber();
-	}
-
-	// Paint the image for the current team
-	if (m_ppImage[team])
-	{
-		// Modulate the color based on the alpha....
-		Color color = m_ppImage[team]->GetColor();
-		int alpha = color[3];
-		color[3] = (alpha * m_Alpha);
-		m_ppImage[team]->SetColor( color );
-
-		if ( yaw != 0.0f )
-		{
-			g_pMatSystemSurface->DisableClipping( true );
-
-			m_ppImage[team]->DoPaint( m_ppImage[team]->GetRenderSizePanel(), yaw );
-
-			g_pMatSystemSurface->DisableClipping( false );
 		}
 		else
 		{
-			// Paint
-			m_ppImage[team]->Paint();
+			team = pEntity->GetTeamNumber();
+		}
+	}
+
+	// Paint the image for the current team.
+	BitmapImage* pImage = m_ppImage[team];
+	if (pImage)
+	{
+		// Modulate the image color based on the alpha value.
+		Color color = pImage->GetColor();
+		int originalAlpha = color[3];
+		color[3] = originalAlpha * m_Alpha;
+		pImage->SetColor(color);
+
+		// If yaw is provided, disable clipping and paint with rotation.
+		if (yaw != 0.0f)
+		{
+			g_pMatSystemSurface->DisableClipping(true);
+			pImage->DoPaint(pImage->GetRenderSizePanel(), yaw);
+			g_pMatSystemSurface->DisableClipping(false);
+		}
+		else
+		{
+			// Standard paint.
+			pImage->Paint();
 		}
 
-		// restore previous color
-		color[3] = alpha;
-		m_ppImage[team]->SetColor( color );
+		// Restore the original color.
+		color[3] = originalAlpha;
+		pImage->SetColor(color);
 	}
 }
 
 
 //-----------------------------------------------------------------------------
-// Helper method to initialize a team image from KeyValues data..
+// InitializeTeamImage: Helper function to initialize a team image from KeyValues.
 //-----------------------------------------------------------------------------
-bool InitializeTeamImage( KeyValues *pInitData, const char* pSectionName, vgui::Panel *pParent, C_BaseEntity *pEntity, CTeamBitmapImage* pTeamImage )
+bool InitializeTeamImage(KeyValues* pInitData, const char* pSectionName, vgui::Panel* pParent, C_BaseEntity* pEntity, CTeamBitmapImage* pTeamImage)
 {
-	KeyValues *pTeamImageSection = pInitData;
+	KeyValues* pTeamImageSection = pInitData;
 	if (pSectionName)
 	{
-		pTeamImageSection = pInitData->FindKey( pSectionName );
-		if ( !pTeamImageSection )
+		pTeamImageSection = pInitData->FindKey(pSectionName);
+		if (!pTeamImageSection)
 			return false;
 	}
 
-	return pTeamImage->Init( pParent, pTeamImageSection, pEntity );
+	return pTeamImage->Init(pParent, pTeamImageSection, pEntity);
 }
-

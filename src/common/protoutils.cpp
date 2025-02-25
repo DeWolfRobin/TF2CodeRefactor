@@ -6,26 +6,27 @@
 #include "google/protobuf/message.h"
 
 //-----------------------------------------------------------------------------
-bool ValveProtoUtils::MessageHasExactFields( const google::protobuf::Message &msg,
-                                             std::initializer_list<int> fields )
+// Checks if the given protobuf Message has exactly the specified field numbers.
+bool ValveProtoUtils::MessageHasExactFields(const google::protobuf::Message& msg,
+    std::initializer_list<int> fields)
 {
-	auto &desc = *msg.GetDescriptor();
-	return ValveProtoUtils::MessageHasExactFields( desc, std::move( fields ) );
+    // Simply forward to the descriptor overload.
+    return ValveProtoUtils::MessageHasExactFields(*msg.GetDescriptor(), fields);
 }
 
 //-----------------------------------------------------------------------------
-bool ValveProtoUtils::MessageHasExactFields( const google::protobuf::Descriptor &msgDesc,
-                                             std::initializer_list<int> fields )
+// Checks if the given protobuf Descriptor has exactly the specified field numbers.
+bool ValveProtoUtils::MessageHasExactFields(const google::protobuf::Descriptor& msgDesc,
+    std::initializer_list<int> fields)
 {
-	int nFields = msgDesc.field_count();
-	if ( nFields != (int)fields.size() )
-		{ return false; }
+    if (msgDesc.field_count() != static_cast<int>(fields.size()))
+        return false;
 
-	for ( int field : fields )
-	{
-		if ( msgDesc.FindFieldByNumber( field ) == nullptr )
-			{ return false; }
-	}
+    for (int field : fields)
+    {
+        if (msgDesc.FindFieldByNumber(field) == nullptr)
+            return false;
+    }
 
-	return true;
+    return true;
 }

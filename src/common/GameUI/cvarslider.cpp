@@ -3,8 +3,8 @@
 // Purpose: 
 //
 // $NoKeywords: $
-//
-//=============================================================================//
+//=============================================================================
+
 #include "cvarslider.h"
 #include <stdio.h>
 #include "tier1/KeyValues.h"
@@ -19,243 +19,231 @@
 
 using namespace vgui;
 
-DECLARE_BUILD_FACTORY( CCvarSlider );
+DECLARE_BUILD_FACTORY(CCvarSlider);
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Constructor: Default slider with no preset cvar.
 //-----------------------------------------------------------------------------
-CCvarSlider::CCvarSlider( Panel *parent, const char *name ) : Slider( parent, name )
+CCvarSlider::CCvarSlider(Panel* parent, const char* name)
+    : Slider(parent, name),
+    m_bAllowOutOfRange(false),
+    m_bModifiedOnce(false),
+    m_fStartValue(0.0f),
+    m_iStartValue(0),
+    m_iLastSliderValue(0),
+    m_fCurrentValue(0.0f),
+    m_bCreatedInCode(false),
+    m_flMinValue(0.0f),
+    m_flMaxValue(1.0f)
 {
-	SetupSlider( 0, 1, "", false );
-	m_bCreatedInCode = false;
-
-	AddActionSignalTarget( this );
+    SetupSlider(0, 1, "", false);
+    AddActionSignalTarget(this);
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Constructor: Slider created with parameters.
 //-----------------------------------------------------------------------------
-CCvarSlider::CCvarSlider( Panel *parent, const char *panelName, char const *caption,
-		float minValue, float maxValue, char const *cvarname, bool bAllowOutOfRange )
-  : Slider( parent, panelName )
+CCvarSlider::CCvarSlider(Panel* parent, const char* panelName, const char* caption,
+    float minValue, float maxValue, const char* cvarname, bool bAllowOutOfRange)
+    : Slider(parent, panelName),
+    m_bAllowOutOfRange(bAllowOutOfRange),
+    m_bModifiedOnce(false),
+    m_fStartValue(0.0f),
+    m_iStartValue(0),
+    m_iLastSliderValue(0),
+    m_fCurrentValue(0.0f),
+    m_bCreatedInCode(true),
+    m_flMinValue(minValue),
+    m_flMaxValue(maxValue)
 {
-	AddActionSignalTarget( this );
-
-	SetupSlider( minValue, maxValue, cvarname, bAllowOutOfRange );
-
-	// For backwards compatability. Ignore .res file settings for forced setup sliders.
-	m_bCreatedInCode = true;
+    AddActionSignalTarget(this);
+    SetupSlider(minValue, maxValue, cvarname, bAllowOutOfRange);
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CCvarSlider::SetupSlider( float minValue, float maxValue, const char *cvarname, bool bAllowOutOfRange )
-{
-	// make sure min/max don't go outside cvar range if there's one
-	UIConVarRef var( g_pVGui->GetVGUIEngine(), cvarname, true );
-	if ( var.IsValid() )
-	{
-		float flCVarMin;
-		if ( var.GetMin( flCVarMin ) )
-		{
-			minValue = m_bUseConVarMinMax ? flCVarMin : MAX( minValue, flCVarMin );
-		}
-		float flCVarMax;
-		if ( var.GetMax( flCVarMax ) )
-		{
-			maxValue = m_bUseConVarMinMax ? flCVarMax : MIN( maxValue, flCVarMax );
-		}
-	}
-
-	m_flMinValue = minValue;
-	m_flMaxValue = maxValue;
-
-	// scale by CVARSLIDER_SCALE_FACTOR
-	SetRange( (int)( CVARSLIDER_SCALE_FACTOR * minValue ), (int)( CVARSLIDER_SCALE_FACTOR * maxValue ) );
-
-	char szMin[ 32 ];
-	char szMax[ 32 ];
-
-	Q_snprintf( szMin, sizeof( szMin ), "%.2f", minValue );
-	Q_snprintf( szMax, sizeof( szMax ), "%.2f", maxValue );
-
-	SetTickCaptions( szMin, szMax );
-
-	Q_strncpy( m_szCvarName, cvarname, sizeof( m_szCvarName ) );
-
-    m_bModifiedOnce = false;
-    m_bAllowOutOfRange = bAllowOutOfRange;
-
-	// Set slider to current value
-	Reset();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
+// Destructor.
 //-----------------------------------------------------------------------------
 CCvarSlider::~CCvarSlider()
 {
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// SetupSlider: Configures the slider range, tick captions, and initial value.
 //-----------------------------------------------------------------------------
-void CCvarSlider::ApplySettings( KeyValues *inResourceData )
+void CCvarSlider::SetupSlider(float minValue, float maxValue, const char* cvarname, bool bAllowOutOfRange)
 {
-	BaseClass::ApplySettings( inResourceData );
+    // Adjust min/max based on the associated cvar, if valid.
+    UIConVarRef var(g_pVGui->GetVGUIEngine(), cvarname, true);
+    if (var.IsValid())
+    {
+        float flCVarMin;
+        if (var.GetMin(flCVarMin))
+        {
+            minValue = m_bUseConVarMinMax ? flCVarMin : MAX(minValue, flCVarMin);
+        }
+        float flCVarMax;
+        if (var.GetMax(flCVarMax))
+        {
+            maxValue = m_bUseConVarMinMax ? flCVarMax : MIN(maxValue, flCVarMax);
+        }
+    }
 
-	if ( !m_bCreatedInCode )
-	{
-		float minValue = inResourceData->GetFloat( "minvalue", 0 );
-		float maxValue = inResourceData->GetFloat( "maxvalue", 1 );
-		const char *cvarname = inResourceData->GetString( "cvar_name", "" );
-		bool bAllowOutOfRange = inResourceData->GetInt( "allowoutofrange", 0 ) != 0;
-		SetupSlider( minValue, maxValue, cvarname, bAllowOutOfRange );
+    m_flMinValue = minValue;
+    m_flMaxValue = maxValue;
 
-		if ( GetParent() )
-		{
-			// HACK: If our parent is a property page, we want the dialog containing it
-			if ( dynamic_cast<vgui::PropertyPage*>(GetParent()) && GetParent()->GetParent() )
-			{
-				GetParent()->GetParent()->AddActionSignalTarget( this );
-			}
-			else
-			{
-				GetParent()->AddActionSignalTarget( this );
-			}
-		}
-	}
-}
+    // Set the slider range using a scale factor.
+    SetRange(static_cast<int>(CVARSLIDER_SCALE_FACTOR * minValue), static_cast<int>(CVARSLIDER_SCALE_FACTOR * maxValue));
 
-//-----------------------------------------------------------------------------
-// Purpose: Get control settings for editing
-//-----------------------------------------------------------------------------
-void CCvarSlider::GetSettings( KeyValues *outResourceData )
-{
-	BaseClass::GetSettings(outResourceData);
+    char szMin[32], szMax[32];
+    Q_snprintf(szMin, sizeof(szMin), "%.2f", minValue);
+    Q_snprintf(szMax, sizeof(szMax), "%.2f", maxValue);
+    SetTickCaptions(szMin, szMax);
 
-	if ( !m_bCreatedInCode )
-	{
-		outResourceData->SetFloat( "minvalue", m_flMinValue );
-		outResourceData->SetFloat( "maxvalue", m_flMaxValue );
-		outResourceData->SetString( "cvar_name", m_szCvarName );
-		outResourceData->SetInt( "allowoutofrange", m_bAllowOutOfRange );
-	}
-}
+    Q_strncpy(m_szCvarName, cvarname, sizeof(m_szCvarName));
 
-void CCvarSlider::SetCVarName( char const *cvarname )
-{
-	Q_strncpy( m_szCvarName, cvarname, sizeof( m_szCvarName ) );
+    m_bModifiedOnce = false;
+    m_bAllowOutOfRange = bAllowOutOfRange;
 
-	m_bModifiedOnce = false;
-
-	// Set slider to current value
-	Reset();
-}
-
-void CCvarSlider::SetMinMaxValues( float minValue, float maxValue, bool bSetTickDisplay )
-{
-	SetRange( (int)( CVARSLIDER_SCALE_FACTOR * minValue ), (int)( CVARSLIDER_SCALE_FACTOR * maxValue ) );
-
-	if ( bSetTickDisplay )
-	{
-		char szMin[ 32 ];
-		char szMax[ 32 ];
-
-		Q_snprintf( szMin, sizeof( szMin ), "%.2f", minValue );
-		Q_snprintf( szMax, sizeof( szMax ), "%.2f", maxValue );
-
-
-		SetTickCaptions( szMin, szMax );
-	}
-
-	// Set slider to current value
-	Reset();
-}
-
-void CCvarSlider::SetTickColor( Color color )
-{
-	m_TickColor = color;
+    // Initialize slider value based on current cvar value.
+    Reset();
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// ApplySettings: Applies resource settings from the provided KeyValues.
+//-----------------------------------------------------------------------------
+void CCvarSlider::ApplySettings(KeyValues* inResourceData)
+{
+    BaseClass::ApplySettings(inResourceData);
+
+    if (!m_bCreatedInCode)
+    {
+        float minValue = inResourceData->GetFloat("minvalue", 0);
+        float maxValue = inResourceData->GetFloat("maxvalue", 1);
+        const char* cvarname = inResourceData->GetString("cvar_name", "");
+        bool bAllowOutOfRange = (inResourceData->GetInt("allowoutofrange", 0) != 0);
+        SetupSlider(minValue, maxValue, cvarname, bAllowOutOfRange);
+
+        if (GetParent())
+        {
+            // If our parent is a property page, add the dialog as the signal target.
+            if (dynamic_cast<vgui::PropertyPage*>(GetParent()) && GetParent()->GetParent())
+            {
+                GetParent()->GetParent()->AddActionSignalTarget(this);
+            }
+            else
+            {
+                GetParent()->AddActionSignalTarget(this);
+            }
+        }
+    }
+}
+
+//-----------------------------------------------------------------------------
+// GetSettings: Saves the current control settings into KeyValues.
+//-----------------------------------------------------------------------------
+void CCvarSlider::GetSettings(KeyValues* outResourceData)
+{
+    BaseClass::GetSettings(outResourceData);
+
+    if (!m_bCreatedInCode)
+    {
+        outResourceData->SetFloat("minvalue", m_flMinValue);
+        outResourceData->SetFloat("maxvalue", m_flMaxValue);
+        outResourceData->SetString("cvar_name", m_szCvarName);
+        outResourceData->SetInt("allowoutofrange", m_bAllowOutOfRange);
+    }
+}
+
+//-----------------------------------------------------------------------------
+// SetCVarName: Sets the cvar name and resets the slider to match its current value.
+//-----------------------------------------------------------------------------
+void CCvarSlider::SetCVarName(const char* cvarname)
+{
+    Q_strncpy(m_szCvarName, cvarname, sizeof(m_szCvarName));
+    m_bModifiedOnce = false;
+    Reset();
+}
+
+//-----------------------------------------------------------------------------
+// SetMinMaxValues: Updates the slider range and tick captions (if requested), then resets.
+//-----------------------------------------------------------------------------
+void CCvarSlider::SetMinMaxValues(float minValue, float maxValue, bool bSetTickDisplay)
+{
+    SetRange(static_cast<int>(CVARSLIDER_SCALE_FACTOR * minValue), static_cast<int>(CVARSLIDER_SCALE_FACTOR * maxValue));
+
+    if (bSetTickDisplay)
+    {
+        char szMin[32], szMax[32];
+        Q_snprintf(szMin, sizeof(szMin), "%.2f", minValue);
+        Q_snprintf(szMax, sizeof(szMax), "%.2f", maxValue);
+        SetTickCaptions(szMin, szMax);
+    }
+    Reset();
+}
+
+//-----------------------------------------------------------------------------
+// SetTickColor: Sets the color for slider tick marks.
+//-----------------------------------------------------------------------------
+void CCvarSlider::SetTickColor(Color color)
+{
+    m_TickColor = color;
+}
+
+//-----------------------------------------------------------------------------
+// Paint: Updates the slider value if the external cvar has changed, then paints.
 //-----------------------------------------------------------------------------
 void CCvarSlider::Paint()
 {
-	// Get engine's current value
-//	float curvalue = engine->pfnGetCvarFloat( m_szCvarName );
-	UIConVarRef var( g_pVGui->GetVGUIEngine(), m_szCvarName, true );
-	if ( !var.IsValid() )
-		return;
-	float curvalue = var.GetFloat();
-	
-    // did it get changed from under us?
+    UIConVarRef var(g_pVGui->GetVGUIEngine(), m_szCvarName, true);
+    if (!var.IsValid())
+        return;
+
+    float curvalue = var.GetFloat();
+
+    // Update slider if the cvar value has changed.
     if (curvalue != m_fStartValue)
     {
-        int val = (int)( CVARSLIDER_SCALE_FACTOR * curvalue );
+        int val = static_cast<int>(CVARSLIDER_SCALE_FACTOR * curvalue);
         m_fStartValue = curvalue;
         m_fCurrentValue = curvalue;
-        
-        SetValue( val );
+        SetValue(val);
         m_iStartValue = GetValue();
     }
-
-	BaseClass::Paint();
+    BaseClass::Paint();
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// ApplyChanges: Applies slider modifications to the associated cvar.
 //-----------------------------------------------------------------------------
 void CCvarSlider::ApplyChanges()
 {
     if (m_bModifiedOnce)
     {
         m_iStartValue = GetValue();
-        if (m_bAllowOutOfRange)
-        {
-            m_fStartValue = m_fCurrentValue;
-        }
-        else
-        {
-            m_fStartValue = (float) m_iStartValue / CVARSLIDER_SCALE_FACTOR;
-        }
-    
-		//engine->Cvar_SetValue( m_szCvarName, m_fStartValue );
-		UIConVarRef var( g_pVGui->GetVGUIEngine(), m_szCvarName, true );
-		if ( !var.IsValid() )
-			return;
-		var.SetValue( (float)m_fStartValue );
-	}
+        m_fStartValue = m_bAllowOutOfRange ? m_fCurrentValue : static_cast<float>(m_iStartValue) / CVARSLIDER_SCALE_FACTOR;
+        UIConVarRef var(g_pVGui->GetVGUIEngine(), m_szCvarName, true);
+        if (!var.IsValid())
+            return;
+        var.SetValue(m_fStartValue);
+    }
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// GetSliderValue: Returns the slider’s current value as a float.
 //-----------------------------------------------------------------------------
 float CCvarSlider::GetSliderValue()
-{	
-    if (m_bAllowOutOfRange)
-    {
-	    return m_fCurrentValue; 
-    }
-    else
-    {
-        return ((float)GetValue())/ CVARSLIDER_SCALE_FACTOR;
-    }
+{
+    return m_bAllowOutOfRange ? m_fCurrentValue : static_cast<float>(GetValue()) / CVARSLIDER_SCALE_FACTOR;
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// SetSliderValue: Sets the slider’s value (and marks it modified if changed).
 //-----------------------------------------------------------------------------
 void CCvarSlider::SetSliderValue(float fValue)
 {
-    int nVal = (int)( CVARSLIDER_SCALE_FACTOR * fValue );
-    SetValue( nVal, false);
-
-    // remember this slider value
+    int nVal = static_cast<int>(CVARSLIDER_SCALE_FACTOR * fValue);
+    SetValue(nVal, false);
     m_iLastSliderValue = GetValue();
-
     if (m_fCurrentValue != fValue)
     {
         m_fCurrentValue = fValue;
@@ -264,71 +252,64 @@ void CCvarSlider::SetSliderValue(float fValue)
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// Reset: Resets the slider to the current value of its associated cvar.
 //-----------------------------------------------------------------------------
 void CCvarSlider::Reset()
 {
-	// Set slider to current value
-//	m_fStartValue = engine->pfnGetCvarFloat( m_szCvarName );
-	UIConVarRef var( g_pVGui->GetVGUIEngine(), m_szCvarName, true );
-	if ( !var.IsValid() )
-	{
-	    m_fCurrentValue = m_fStartValue = 0.0f;
-		SetValue( 0, false );
-		m_iStartValue = GetValue();
-	    m_iLastSliderValue = m_iStartValue;
-		return;
-	}
-	m_fStartValue = var.GetFloat();
+    UIConVarRef var(g_pVGui->GetVGUIEngine(), m_szCvarName, true);
+    if (!var.IsValid())
+    {
+        m_fCurrentValue = m_fStartValue = 0.0f;
+        SetValue(0, false);
+        m_iStartValue = GetValue();
+        m_iLastSliderValue = m_iStartValue;
+        return;
+    }
+    m_fStartValue = var.GetFloat();
     m_fCurrentValue = m_fStartValue;
-
-    int value = (int)( CVARSLIDER_SCALE_FACTOR * m_fStartValue );
-	SetValue( value, false );
-
-	m_iStartValue = GetValue();
+    int value = static_cast<int>(CVARSLIDER_SCALE_FACTOR * m_fStartValue);
+    SetValue(value, false);
+    m_iStartValue = GetValue();
     m_iLastSliderValue = m_iStartValue;
-
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// HasBeenModified: Returns true if the slider value has been changed.
 //-----------------------------------------------------------------------------
 bool CCvarSlider::HasBeenModified()
 {
-    if (GetValue() != m_iStartValue)
+    int currentValue = GetValue();
+    if (currentValue != m_iStartValue)
     {
         m_bModifiedOnce = true;
     }
-
     return m_bModifiedOnce;
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : position - 
+// OnSliderMoved: Handles slider movement events and signals if modified.
 //-----------------------------------------------------------------------------
 void CCvarSlider::OnSliderMoved()
 {
-	if (HasBeenModified())
-	{
-        if (m_iLastSliderValue != GetValue())
+    if (HasBeenModified())
+    {
+        int currentValue = GetValue();
+        if (m_iLastSliderValue != currentValue)
         {
-            m_iLastSliderValue = GetValue();
-            m_fCurrentValue = ((float) m_iLastSliderValue)/CVARSLIDER_SCALE_FACTOR;
+            m_iLastSliderValue = currentValue;
+            m_fCurrentValue = static_cast<float>(m_iLastSliderValue) / CVARSLIDER_SCALE_FACTOR;
         }
-
-		// tell parent that we've been modified
-		PostActionSignal(new KeyValues("ControlModified"));
-	}
+        PostActionSignal(new KeyValues("ControlModified"));
+    }
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
+// OnSliderDragEnd: Applies changes when slider dragging ends (if not created in code).
 //-----------------------------------------------------------------------------
-void CCvarSlider::OnSliderDragEnd( void )
+void CCvarSlider::OnSliderDragEnd()
 {
-	if ( !m_bCreatedInCode )
-	{
-		ApplyChanges();
-	}
+    if (!m_bCreatedInCode)
+    {
+        ApplyChanges();
+    }
 }
