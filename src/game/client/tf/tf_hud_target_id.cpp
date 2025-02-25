@@ -104,7 +104,7 @@ bool ShouldHealthBarBeVisible( CBaseEntity *pTarget, CTFPlayer *pLocalPlayer )
 		return true;
 
 	int iSeeEnemyHealth = 0;
-	CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pLocalPlayer, iSeeEnemyHealth, see_enemy_health )
+	CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pLocalPlayer, iSeeEnemyHealth, see_enemy_health );
 	if ( iSeeEnemyHealth )
 		return true;
 	

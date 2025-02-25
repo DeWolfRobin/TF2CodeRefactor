@@ -171,7 +171,7 @@ int	CTFWeaponBaseMelee::GetSwingRange( void )
 	else
 	{
 		int iIsSword = 0;
-		CALL_ATTRIB_HOOK_INT( iIsSword, is_a_sword )
+		CALL_ATTRIB_HOOK_INT( iIsSword, is_a_sword );
 		if ( iIsSword )
 		{
 			return 72; // swords are typically 72

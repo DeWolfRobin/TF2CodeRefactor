@@ -72,7 +72,7 @@ public:
 	// ITFChargeUpWeapon
 	virtual bool CanCharge() { return true; }
 	virtual float GetChargeBeginTime( void ) { return m_flChargeBeginTime; }
-	virtual float GetChargeMaxTime( void ) { float flChargeTime = TF_PIPEBOMB_MAX_CHARGE_TIME;	CALL_ATTRIB_HOOK_FLOAT( flChargeTime, stickybomb_charge_rate )	return flChargeTime; }
+	virtual float GetChargeMaxTime( void ) { float flChargeTime = TF_PIPEBOMB_MAX_CHARGE_TIME;	CALL_ATTRIB_HOOK_FLOAT( flChargeTime, stickybomb_charge_rate );	return flChargeTime; }
 	virtual float GetChargeForceReleaseTime( void ) { return GetChargeMaxTime(); }
 	int	GetPipeBombCount( void ) { return m_iPipebombCount; }
 	const CUtlVector< CHandle< CTFGrenadePipebombProjectile > > &GetPipeBombVector( void ) const;
