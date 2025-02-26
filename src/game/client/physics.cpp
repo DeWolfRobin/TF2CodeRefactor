@@ -137,9 +137,9 @@ bool PhysIsInCallback()
 
 bool PhysicsDLLInit( CreateInterfaceFn physicsFactory )
 {
-	if ((physics = (IPhysics *)physicsFactory( VPHYSICS_INTERFACE_VERSION, NULL )) == NULL ||
-		(physprops = (IPhysicsSurfaceProps *)physicsFactory( VPHYSICS_SURFACEPROPS_INTERFACE_VERSION, NULL )) == NULL ||
-		(physcollision = (IPhysicsCollision *)physicsFactory( VPHYSICS_COLLISION_INTERFACE_VERSION, NULL )) == NULL )
+	if ((physics = (IPhysics *)physicsFactory( VPHYSICS_INTERFACE_VERSION, nullptr )) == nullptr ||
+		(physprops = (IPhysicsSurfaceProps *)physicsFactory( VPHYSICS_SURFACEPROPS_INTERFACE_VERSION, nullptr )) == nullptr ||
+		(physcollision = (IPhysicsCollision *)physicsFactory( VPHYSICS_COLLISION_INTERFACE_VERSION, nullptr )) == nullptr )
 	{
 		return false;
 	}
@@ -177,7 +177,7 @@ void PhysicsLevelInit( void )
 
 	g_PhysWorldObject = PhysCreateWorld_Shared( GetClientWorldEntity(), modelinfo->GetVCollide(1), g_PhysDefaultObjectParams );
 
-	staticpropmgr->CreateVPhysicsRepresentations( physenv, &g_SolidSetup, NULL );
+	staticpropmgr->CreateVPhysicsRepresentations( physenv, &g_SolidSetup, nullptr );
 }
 
 void PhysicsReset()
@@ -383,12 +383,12 @@ void CPhysicsSystem::LevelShutdownPostEntity()
 		physics->DestroyEnvironment( physenv );
 	}
 	physics->DestroyObjectPairHash( g_EntityCollisionHash );
-	g_EntityCollisionHash = NULL;
+	g_EntityCollisionHash = nullptr;
 
 	physics->DestroyAllCollisionSets();
 
-	physenv = NULL;
-	g_PhysWorldObject = NULL;
+	physenv = nullptr;
+	g_PhysWorldObject = nullptr;
 }
 
 void CPhysicsSystem::AddImpactSound( void *pGameData, IPhysicsObject *pObject, int surfaceProps, int surfacePropsHit, float volume, float speed )
@@ -420,7 +420,7 @@ void CPhysicsSystem::PhysicsSimulate()
 		physenv->Simulate( frametime * cl_phys_timescale.GetFloat() );
 
 		int activeCount = physenv->GetActiveObjectCount();
-		IPhysicsObject **pActiveList = NULL;
+		IPhysicsObject **pActiveList = nullptr;
 		if ( activeCount )
 		{
 			pActiveList = (IPhysicsObject **)stackalloc( sizeof(IPhysicsObject *)*activeCount );
@@ -667,7 +667,7 @@ void CCollisionEvent::Friction( IPhysicsObject *pObject, float energy, int surfa
 
 friction_t *CCollisionEvent::FindFriction( CBaseEntity *pObject )
 {
-	friction_t *pFree = NULL;
+	friction_t *pFree = nullptr;
 
 	for ( int i = 0; i < ARRAYSIZE(m_current); i++ )
 	{
@@ -685,8 +685,8 @@ void CCollisionEvent::ShutdownFriction( friction_t &friction )
 {
 //	Msg( "Scrape Stop %s \n", STRING(friction.pObject->m_iClassname) );
 	CSoundEnvelopeController::GetController().SoundDestroy( friction.patch );
-	friction.patch = NULL;
-	friction.pObject = NULL;
+	friction.patch = nullptr;
+	friction.pObject = nullptr;
 }
 
 void CCollisionEvent::UpdateFrictionSounds( void )
@@ -729,144 +729,106 @@ static int BestAxisMatchingNormal( matrix3x4_t &matrix, const Vector &normal )
 	return best;
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : *pFluid - 
-//			*pObject - 
-//			*pEntity - 
-//-----------------------------------------------------------------------------
-void PhysicsSplash( IPhysicsFluidController *pFluid, IPhysicsObject *pObject, CBaseEntity *pEntity )
+void PhysicsSplash(IPhysicsFluidController* pFluid, IPhysicsObject* pObject, CBaseEntity* pEntity)
 {
-	//FIXME: For now just allow ragdolls for E3 - jdw
-	if ( ( pObject->GetGameFlags() & FVPHYSICS_PART_OF_RAGDOLL ) == false )
+	// Only process if the object is part of a ragdoll.
+	if (!(pObject->GetGameFlags() & FVPHYSICS_PART_OF_RAGDOLL))
 		return;
 
 	Vector velocity;
-	pObject->GetVelocity( &velocity, NULL );
-	
+	pObject->GetVelocity(&velocity, nullptr);
 	float impactSpeed = velocity.Length();
-
-	if ( impactSpeed < 25.0f )
+	if (impactSpeed < 25.0f)
 		return;
 
+	// Get the fluid surface plane.
 	Vector normal;
 	float dist;
-	pFluid->GetSurfacePlane( &normal, &dist );
+	pFluid->GetSurfacePlane(&normal, &dist);
 
-	matrix3x4_t &matrix = pEntity->EntityToWorldTransform();
-	
-	// Find the local axis that best matches the water surface normal
-	int bestAxis = BestAxisMatchingNormal( matrix, normal );
+	// Retrieve the entity's world transform.
+	matrix3x4_t& matrix = pEntity->EntityToWorldTransform();
 
-	Vector tangent, binormal;
-	MatrixGetColumn( matrix, (bestAxis+1)%3, tangent );
-	binormal = CrossProduct( normal, tangent );
-	VectorNormalize( binormal );
-	tangent = CrossProduct( binormal, normal );
-	VectorNormalize( tangent );
+	// Compute the best matching axis between the object's local axes and the fluid surface normal.
+	int bestAxis = BestAxisMatchingNormal(matrix, normal);
 
-	// Now we have a basis tangent to the surface that matches the object's local orientation as well as possible
-	// compute an OBB using this basis
-	
-	// Get object extents in basis
-	Vector tanPts[2], binPts[2];
-	tanPts[0] = physcollision->CollideGetExtent( pObject->GetCollide(), pEntity->GetAbsOrigin(), pEntity->GetAbsAngles(), -tangent );
-	tanPts[1] = physcollision->CollideGetExtent( pObject->GetCollide(), pEntity->GetAbsOrigin(), pEntity->GetAbsAngles(), tangent );
-	binPts[0] = physcollision->CollideGetExtent( pObject->GetCollide(), pEntity->GetAbsOrigin(), pEntity->GetAbsAngles(), -binormal );
-	binPts[1] = physcollision->CollideGetExtent( pObject->GetCollide(), pEntity->GetAbsOrigin(), pEntity->GetAbsAngles(), binormal );
+	// Compute tangent and binormal vectors.
+	Vector tangent;
+	MatrixGetColumn(matrix, (bestAxis + 1) % 3, tangent);
+	Vector binormal = CrossProduct(normal, tangent);
+	VectorNormalize(binormal);
+	tangent = CrossProduct(binormal, normal);
+	VectorNormalize(tangent);
 
-	// now compute the centered bbox
-	float mins[2], maxs[2], center[2], extents[2];
-	mins[0] = DotProduct( tanPts[0], tangent );
-	maxs[0] = DotProduct( tanPts[1], tangent );
+	// Calculate extents along tangent and binormal directions using collision data.
+	Vector tanExtentNeg = physcollision->CollideGetExtent(pObject->GetCollide(), pEntity->GetAbsOrigin(), pEntity->GetAbsAngles(), -tangent);
+	Vector tanExtentPos = physcollision->CollideGetExtent(pObject->GetCollide(), pEntity->GetAbsOrigin(), pEntity->GetAbsAngles(), tangent);
+	float minTan = DotProduct(tanExtentNeg, tangent);
+	float maxTan = DotProduct(tanExtentPos, tangent);
 
-	mins[1] = DotProduct( binPts[0], binormal );
-	maxs[1] = DotProduct( binPts[1], binormal );
+	Vector binExtentNeg = physcollision->CollideGetExtent(pObject->GetCollide(), pEntity->GetAbsOrigin(), pEntity->GetAbsAngles(), -binormal);
+	Vector binExtentPos = physcollision->CollideGetExtent(pObject->GetCollide(), pEntity->GetAbsOrigin(), pEntity->GetAbsAngles(), binormal);
+	float minBin = DotProduct(binExtentNeg, binormal);
+	float maxBin = DotProduct(binExtentPos, binormal);
 
-	center[0] = 0.5 * (mins[0] + maxs[0]);
-	center[1] = 0.5 * (mins[1] + maxs[1]);
+	// Compute the center along the tangent and binormal directions.
+	float centerTan = 0.5f * (minTan + maxTan);
+	float centerBin = 0.5f * (minBin + maxBin);
+	Vector centerPoint = tangent * centerTan + binormal * centerBin + normal * dist;
 
-	extents[0] = maxs[0] - center[0];
-	extents[1] = maxs[1] - center[1];
+	// Compute axes for visualization (for splash placement).
+	Vector axisTan = tangent * (maxTan - centerTan);
+	Vector axisBin = binormal * (maxBin - centerBin);
 
-	Vector centerPoint = center[0] * tangent + center[1] * binormal + dist * normal;
+	// Compute the four corners of the oriented bounding box.
+	Vector corner[4];
+	corner[0] = centerPoint - axisTan - axisBin;
+	corner[1] = centerPoint + axisTan - axisBin;
+	corner[2] = centerPoint + axisTan + axisBin;
+	corner[3] = centerPoint - axisTan + axisBin;
 
-	Vector axes[2];
-	axes[0] = (maxs[0] - center[0]) * tangent;
-	axes[1] = (maxs[1] - center[1]) * binormal;
+	// Determine the contents at a point slightly below centerPoint to check for slime.
+	int contents = enginetrace->GetPointContents(centerPoint - Vector(0, 0, 2));
+	bool bInSlime = (contents & CONTENTS_SLIME) != 0;
 
-	// visualize OBB hit
-	/*
-	Vector corner1 = centerPoint - axes[0] - axes[1];
-	Vector corner2 = centerPoint + axes[0] - axes[1];
-	Vector corner3 = centerPoint + axes[0] + axes[1];
-	Vector corner4 = centerPoint - axes[0] + axes[1];
-	NDebugOverlay::Line( corner1, corner2, 0, 0, 255, false, 10 );
-	NDebugOverlay::Line( corner2, corner3, 0, 0, 255, false, 10 );
-	NDebugOverlay::Line( corner3, corner4, 0, 0, 255, false, 10 );
-	NDebugOverlay::Line( corner4, corner1, 0, 0, 255, false, 10 );
-	*/
-
-	Vector	corner[4];
-
-	corner[0] = centerPoint - axes[0] - axes[1];
-	corner[1] = centerPoint + axes[0] - axes[1];
-	corner[2] = centerPoint + axes[0] + axes[1];
-	corner[3] = centerPoint - axes[0] + axes[1];
-
-	int contents = enginetrace->GetPointContents( centerPoint-Vector(0,0,2) );
-
-	bool bInSlime = ( contents & CONTENTS_SLIME ) ? true : false;
-
-	Vector	color = vec3_origin;
-	float	luminosity = 1.0f;
-	
-	if ( !bInSlime )
+	// Get splash lighting if not in slime.
+	Vector color = vec3_origin;
+	float luminosity = 1.0f;
+	if (!bInSlime)
 	{
-		// Get our lighting information
-		FX_GetSplashLighting( centerPoint + ( normal * 8.0f ), &color, &luminosity );
+		FX_GetSplashLighting(centerPoint + normal * 8.0f, &color, &luminosity);
 	}
 
-	if ( impactSpeed > 150 )
+	// Trigger the primary splash effect based on impact speed.
+	if (impactSpeed > 150)
 	{
-		if ( bInSlime )
-		{
-			FX_GunshotSlimeSplash( centerPoint, normal, random->RandomFloat( 8, 10 ) );
-		}
+		if (bInSlime)
+			FX_GunshotSlimeSplash(centerPoint, normal, random->RandomFloat(8, 10));
 		else
-		{
-			FX_GunshotSplash( centerPoint, normal, random->RandomFloat( 8, 10 ) );
-		}
+			FX_GunshotSplash(centerPoint, normal, random->RandomFloat(8, 10));
 	}
-	else if ( !bInSlime )
+	else if (!bInSlime)
 	{
-		FX_WaterRipple( centerPoint, 1.5f, &color, 1.5f, luminosity );
+		FX_WaterRipple(centerPoint, 1.5f, &color, 1.5f, luminosity);
 	}
-	
-	int		splashes = 4;
-	Vector	point;
 
-	for ( int i = 0; i < splashes; i++ )
+	// Generate additional splash effects at randomized positions around each corner.
+	const int splashes = 4;
+	for (int i = 0; i < splashes; ++i)
 	{
-		point = RandomVector( -32.0f, 32.0f );
-		point[2] = 0.0f;
-
-		point += corner[i];
-
-		if ( impactSpeed > 150 )
+		Vector offset = RandomVector(-32.0f, 32.0f);
+		offset.z = 0.0f;
+		Vector splashPoint = corner[i] + offset;
+		if (impactSpeed > 150)
 		{
-			if ( bInSlime )
-			{
-				FX_GunshotSlimeSplash( centerPoint, normal, random->RandomFloat( 4, 6 ) );
-			}
+			if (bInSlime)
+				FX_GunshotSlimeSplash(centerPoint, normal, random->RandomFloat(4, 6));
 			else
-			{
-				FX_GunshotSplash( centerPoint, normal, random->RandomFloat( 4, 6 ) );
-			}
+				FX_GunshotSplash(centerPoint, normal, random->RandomFloat(4, 6));
 		}
-		else if ( !bInSlime )
+		else if (!bInSlime)
 		{
-			FX_WaterRipple( point, random->RandomFloat( 0.25f, 0.5f ), &color, luminosity, random->RandomFloat( 0.5f, 1.0f ) );
+			FX_WaterRipple(splashPoint, random->RandomFloat(0.25f, 0.5f), &color, luminosity, random->RandomFloat(0.5f, 1.0f));
 		}
 	}
 }
@@ -914,7 +876,7 @@ float CCollisionEvent::DeltaTimeSinceLastFluid( CBaseEntity *pEntity )
 void CCollisionEvent::FluidStartTouch( IPhysicsObject *pObject, IPhysicsFluidController *pFluid )
 {
 	CallbackContext callback(this);
-	if ( ( pObject == NULL ) || ( pFluid == NULL ) )
+	if ( ( pObject == nullptr ) || ( pFluid == nullptr ) )
 		return;
 
 	CBaseEntity *pEntity = static_cast<CBaseEntity *>(pObject->GetGameData());
@@ -961,7 +923,7 @@ void PhysFrictionSound( CBaseEntity *pEntity, IPhysicsObject *pObject, const cha
 			return;
 
 		CSoundParameters params;
-		if ( !CBaseEntity::GetParametersForSound( pSoundName, handle, params, NULL ) )
+		if ( !CBaseEntity::GetParametersForSound( pSoundName, handle, params, nullptr ) )
 			return;
 
 		if ( !pFriction->pObject )
