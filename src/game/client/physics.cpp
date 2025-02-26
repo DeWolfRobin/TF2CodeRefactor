@@ -23,8 +23,6 @@
 #include "fx_water.h"
 #include "positionwatcher.h"
 #include "vphysics/constraints.h"
-// memdbgon must be the last include file in a .cpp file!!!
-#include "tier0/memdbgon.h"
 
 // file system interface
 extern IFileSystem *filesystem;
@@ -68,10 +66,6 @@ public:
 
 	// IPhysicsCollisionSolver
 	int		ShouldCollide( IPhysicsObject *pObj0, IPhysicsObject *pObj1, void *pGameData0, void *pGameData1 );
-#if _DEBUG
-	int		ShouldCollide_2( IPhysicsObject *pObj0, IPhysicsObject *pObj1, void *pGameData0, void *pGameData1 );
-#endif
-	// debugging collision problem in TF2
 	int		ShouldSolvePenetration( IPhysicsObject *pObj0, IPhysicsObject *pObj1, void *pGameData0, void *pGameData1, float dt );
 	bool	ShouldFreezeObject( IPhysicsObject *pObject ) { return true; }
 	int		AdditionalCollisionChecksThisTick( int currentChecksDone ) { return 0; }
@@ -194,140 +188,119 @@ void PhysicsReset()
 	physenv->ResetSimulationClock();
 }
 
+ConVar cl_ragdoll_collide("cl_ragdoll_collide", "0");
 
-ConVar cl_ragdoll_collide( "cl_ragdoll_collide", "0" );
-
-int CCollisionEvent::ShouldCollide( IPhysicsObject *pObj0, IPhysicsObject *pObj1, void *pGameData0, void *pGameData1 )
-#if _DEBUG
-{
-	int x0 = ShouldCollide_2(pObj0, pObj1, pGameData0, pGameData1);
-	int x1 = ShouldCollide_2(pObj1, pObj0, pGameData1, pGameData0);
-	Assert(x0==x1);
-	return x0;
-}
-int CCollisionEvent::ShouldCollide_2( IPhysicsObject *pObj0, IPhysicsObject *pObj1, void *pGameData0, void *pGameData1 )
-#endif
+int CCollisionEvent::ShouldCollide(IPhysicsObject* pObj0, IPhysicsObject* pObj1, void* pGameData0, void* pGameData1)
 {
 	CallbackContext callback(this);
 
-	C_BaseEntity *pEntity0 = static_cast<C_BaseEntity *>(pGameData0);
-	C_BaseEntity *pEntity1 = static_cast<C_BaseEntity *>(pGameData1);
+	// Get the associated entities.
+	C_BaseEntity* pEntity0 = static_cast<C_BaseEntity*>(pGameData0);
+	C_BaseEntity* pEntity1 = static_cast<C_BaseEntity*>(pGameData1);
 
-	if ( !pEntity0 || !pEntity1 )
+	// If either entity is missing, allow collision.
+	if (!pEntity0 || !pEntity1)
 		return 1;
 
-	unsigned short gameFlags0 = pObj0->GetGameFlags();
-	unsigned short gameFlags1 = pObj1->GetGameFlags();
+	// Retrieve game flags only once.
+	const unsigned short gameFlags0 = pObj0->GetGameFlags();
+	const unsigned short gameFlags1 = pObj1->GetGameFlags();
 
-	if ( pEntity0 == pEntity1 )
+	// If both physics objects belong to the same entity...
+	if (pEntity0 == pEntity1)
 	{
-		// allow all-or-nothing per-entity disable
-		if ( (gameFlags0 | gameFlags1) & FVPHYSICS_NO_SELF_COLLISIONS )
+		// If self-collision is disabled, then do not collide.
+		if ((gameFlags0 | gameFlags1) & FVPHYSICS_NO_SELF_COLLISIONS)
 			return 0;
 
-		IPhysicsCollisionSet *pSet = physics->FindCollisionSet( pEntity0->GetModelIndex() );
-		if ( pSet )
-			return pSet->ShouldCollide( pObj0->GetGameIndex(), pObj1->GetGameIndex() );
-
+		// Otherwise, check the collision set for that entity.
+		if (IPhysicsCollisionSet* pSet = physics->FindCollisionSet(pEntity0->GetModelIndex()))
+			return pSet->ShouldCollide(pObj0->GetGameIndex(), pObj1->GetGameIndex());
 		return 1;
 	}
-	// Obey collision group rules
-	Assert(GameRules());
-	if ( GameRules() )
+
+	// Apply global collision rules.
+	if (GameRules() && !GameRules()->ShouldCollide(pEntity0->GetCollisionGroup(), pEntity1->GetCollisionGroup()))
+		return 0;
+
+	// If both objects are part of a ragdoll and ragdoll collisions are disabled, then no collision.
+	if ((gameFlags0 & FVPHYSICS_PART_OF_RAGDOLL) && (gameFlags1 & FVPHYSICS_PART_OF_RAGDOLL))
 	{
-		if (!GameRules()->ShouldCollide( pEntity0->GetCollisionGroup(), pEntity1->GetCollisionGroup() ))
+		if (!cl_ragdoll_collide.GetBool())
 			return 0;
 	}
 
-	if ( (pObj0->GetGameFlags() & FVPHYSICS_PART_OF_RAGDOLL) && (pObj1->GetGameFlags() & FVPHYSICS_PART_OF_RAGDOLL) )
-	{
-		if ( !cl_ragdoll_collide.GetBool() )
-			return 0;
-	}
-
-	// check contents
-	if ( !(pObj0->GetContents() & pEntity1->PhysicsSolidMaskForEntity()) || !(pObj1->GetContents() & pEntity0->PhysicsSolidMaskForEntity()) )
+	// Check whether the contents of each physics object intersect the other's solid mask.
+	if (!(pObj0->GetContents() & pEntity1->PhysicsSolidMaskForEntity()) ||
+		!(pObj1->GetContents() & pEntity0->PhysicsSolidMaskForEntity()))
 		return 0;
 
-	if ( g_EntityCollisionHash->IsObjectPairInHash( pGameData0, pGameData1 ) )
+	// Check collision hash for either the entity pointers or the physics objects.
+	if (g_EntityCollisionHash->IsObjectPairInHash(pGameData0, pGameData1) ||
+		g_EntityCollisionHash->IsObjectPairInHash(pObj0, pObj1))
 		return 0;
 
-	if ( g_EntityCollisionHash->IsObjectPairInHash( pObj0, pObj1 ) )
-		return 0;
+	// Determine movement type status for each entity.
+	const int movetype0 = pEntity0->GetMoveType();
+	const int movetype1 = pEntity1->GetMoveType();
+	bool aiMove0 = (movetype0 == MOVETYPE_PUSH);
+	bool aiMove1 = (movetype1 == MOVETYPE_PUSH);
 
-#if 0
-	int solid0 = pEntity0->GetSolid();
-	int solid1 = pEntity1->GetSolid();
-	int nSolidFlags0 = pEntity0->GetSolidFlags();
-	int nSolidFlags1 = pEntity1->GetSolidFlags();
-#endif
-
-	int movetype0 = pEntity0->GetMoveType();
-	int movetype1 = pEntity1->GetMoveType();
-
-	// entities with non-physical move parents or entities with MOVETYPE_PUSH
-	// are considered as "AI movers".  They are unchanged by collision; they exert
-	// physics forces on the rest of the system.
-	bool aiMove0 = (movetype0==MOVETYPE_PUSH) ? true : false;
-	bool aiMove1 = (movetype1==MOVETYPE_PUSH) ? true : false;
-
-	if ( pEntity0->GetMoveParent() )
+	// If an entity has a move parent that isn’t fully physical, mark it as an AI mover.
+	if (pEntity0->GetMoveParent() &&
+		!(movetype0 == MOVETYPE_VPHYSICS && pEntity0->GetRootMoveParent()->GetMoveType() == MOVETYPE_VPHYSICS))
 	{
-		// if the object & its parent are both MOVETYPE_VPHYSICS, then this must be a special case
-		// like a prop_ragdoll_attached
-		if ( !(movetype0 == MOVETYPE_VPHYSICS && pEntity0->GetRootMoveParent()->GetMoveType() == MOVETYPE_VPHYSICS) )
-		{
-			aiMove0 = true;
-		}
+		aiMove0 = true;
 	}
-	if ( pEntity1->GetMoveParent() )
+	if (pEntity1->GetMoveParent() &&
+		!(movetype1 == MOVETYPE_VPHYSICS && pEntity1->GetRootMoveParent()->GetMoveType() == MOVETYPE_VPHYSICS))
 	{
-		// if the object & its parent are both MOVETYPE_VPHYSICS, then this must be a special case.
-		if ( !(movetype1 == MOVETYPE_VPHYSICS && pEntity1->GetRootMoveParent()->GetMoveType() == MOVETYPE_VPHYSICS) )
-		{
-			aiMove1 = true;
-		}
+		aiMove1 = true;
 	}
 
-	// AI movers don't collide with the world/static/pinned objects or other AI movers
-	if ( (aiMove0 && !pObj1->IsMoveable()) ||
+	// AI movers do not collide with immovable objects or with other AI movers.
+	if ((aiMove0 && !pObj1->IsMoveable()) ||
 		(aiMove1 && !pObj0->IsMoveable()) ||
-		(aiMove0 && aiMove1) )
+		(aiMove0 && aiMove1))
+	{
+		return 0;
+	}
+
+	// Do not allow collision if both objects are under shadow control.
+	if (pObj0->GetShadowController() && pObj1->GetShadowController())
 		return 0;
 
-	// two objects under shadow control should not collide.  The AI will figure it out
-	if ( pObj0->GetShadowController() && pObj1->GetShadowController() )
-		return 0;
+	// If none of the tests failed, allow collision.
 	return 1;
 }
 
-int CCollisionEvent::ShouldSolvePenetration( IPhysicsObject *pObj0, IPhysicsObject *pObj1, void *pGameData0, void *pGameData1, float dt )
+int CCollisionEvent::ShouldSolvePenetration(IPhysicsObject *pObj0, IPhysicsObject *pObj1, 
+    void *pGameData0, void *pGameData1, float dt)
 {
-	CallbackContext callback(this);
-	// solve it yourself here and return 0, or have the default implementation do it
-	if ( pGameData0 == pGameData1 )
-	{
-		if ( pObj0->GetGameFlags() & FVPHYSICS_PART_OF_RAGDOLL )
-		{
-			// this is a ragdoll, self penetrating
-			C_BaseEntity *pEnt = reinterpret_cast<C_BaseEntity *>(pGameData0);
-			C_BaseAnimating *pAnim = pEnt->GetBaseAnimating();
+    CallbackContext callback(this);
+    
+    // Only consider self-penetration if both objects share the same game data.
+    if (pGameData0 != pGameData1)
+        return 1;
 
-			if ( pAnim && pAnim->m_pRagdoll )
-			{
-				IPhysicsConstraintGroup *pGroup = pAnim->m_pRagdoll->GetConstraintGroup();
-				if ( pGroup )
-				{
-					pGroup->SolvePenetration( pObj0, pObj1 );
-					return false;
-				}
-			}
-		}
-	}
-
-	return true;
-}
-
+    // If not a ragdoll, then default solve penetration.
+    if (!(pObj0->GetGameFlags() & FVPHYSICS_PART_OF_RAGDOLL))
+        return 1;
+ 
+    C_BaseEntity *pEnt = static_cast<C_BaseEntity *>(pGameData0);
+    C_BaseAnimating *pAnim = pEnt->GetBaseAnimating();
+    if (!pAnim || !pAnim->m_pRagdoll)
+        return 1;
+ 
+    IPhysicsConstraintGroup *pGroup = pAnim->m_pRagdoll->GetConstraintGroup();
+    if (pGroup)
+    {
+        pGroup->SolvePenetration(pObj0, pObj1);
+        return 0;
+    }
+    
+    return 1;
+ }
 
 // A class that implements an IClientSystem for physics
 class CPhysicsSystem : public CAutoGameSystemPerFrame
