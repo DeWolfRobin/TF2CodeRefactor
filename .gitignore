@@ -504,3 +504,4 @@ FodyWeavers.xsd
 *.sln.iml
 /game
 clang_tidy_fix.ps1
+srctree.txt
