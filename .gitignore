@@ -503,3 +503,4 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 /game
+clang_tidy_fix.ps1
