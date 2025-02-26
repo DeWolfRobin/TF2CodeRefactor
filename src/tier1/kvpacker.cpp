@@ -9,11 +9,8 @@
 #include <KeyValues.h>
 #include "kvpacker.h"
 
-#include "tier0/dbg.h"
 #include "utlbuffer.h"
 
-// memdbgon must be the last include file in a .cpp file!!!
-#include <tier0/memdbgon.h>
 
 #define KEYVALUES_TOKEN_SIZE	1024
 

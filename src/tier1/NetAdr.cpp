@@ -23,8 +23,6 @@ typedef int socklen_t;
 #include <sys/socket.h>	// getsockname()
 #endif
 
-// memdbgon must be the last include file in a .cpp file!!!
-#include "tier0/memdbgon.h"
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction

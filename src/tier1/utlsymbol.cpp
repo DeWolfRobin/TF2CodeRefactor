@@ -9,10 +9,7 @@
 #pragma warning (disable:4514)
 
 #include "utlsymbol.h"
-#include "KeyValues.h"
 #include "tier0/threadtools.h"
-#include "tier0/memdbgon.h"
-#include "stringpool.h"
 #include "utlhashtable.h"
 #include "utlstring.h"
 
@@ -32,9 +29,6 @@
 		#endif
 	#endif
 #endif
-
-// memdbgon must be the last include file in a .cpp file!!!
-#include "tier0/memdbgon.h"
 
 #define INVALID_STRING_INDEX CStringPoolIndex( 0xFFFF, 0xFFFF )
 

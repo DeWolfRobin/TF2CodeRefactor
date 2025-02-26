@@ -23,16 +23,12 @@
 #include <Color.h>
 #include <stdlib.h>
 #include "tier0/dbg.h"
-#include "tier0/mem.h"
 #include "utlbuffer.h"
 #include "utlhash.h"
 #include "utlvector.h"
 #include "utlqueue.h"
 #include "UtlSortVector.h"
 #include "convar.h"
-
-// memdbgon must be the last include file in a .cpp file!!!
-#include <tier0/memdbgon.h>
 
 static const char * s_LastFileLoadingFrom = "unknown"; // just needed for error messages
 

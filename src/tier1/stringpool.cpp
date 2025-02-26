@@ -11,8 +11,6 @@
 #include "tier1/strtools.h"
 #include "generichash.h"
 
-// memdbgon must be the last include file in a .cpp file!!!
-#include "tier0/memdbgon.h"
 
 //-----------------------------------------------------------------------------
 // Purpose: Comparison function for string sorted associative data structures

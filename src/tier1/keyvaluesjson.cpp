@@ -7,7 +7,6 @@
 #include "tier1/keyvaluesjson.h"
 #include "tier1/utlbuffer.h"
 #include "tier1/strtools.h"
-#include <stdint.h> // INT32_MIN defn
 
 KeyValuesJSONParser::KeyValuesJSONParser( const CUtlBuffer &buf )
 {

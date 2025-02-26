@@ -8,9 +8,6 @@
 #include "commonmacros.h"
 #include "checksum_crc.h"
 
-// memdbgon must be the last include file in a .cpp file!!!
-#include "tier0/memdbgon.h"
-
 #define CRC32_INIT_VALUE 0xFFFFFFFFUL
 #define CRC32_XOR_VALUE  0xFFFFFFFFUL
 

@@ -12,11 +12,6 @@
 #include "tier1/strtools.h"
 #include "bitvec.h"
 
-// NOTE: For X360 builds, include memdbgon after everything else.
-#ifdef _X360
-#include "tier0/memdbgon.h"
-#endif
-
 #if _WIN32
 #define FAST_BIT_SCAN 1
 #if _X360

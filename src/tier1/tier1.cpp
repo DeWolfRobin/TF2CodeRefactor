@@ -5,7 +5,6 @@
 //===========================================================================//
 
 #include <tier1/tier1.h>
-#include "tier0/dbg.h"
 #include "vstdlib/iprocessutils.h"
 #include "icvar.h"
 

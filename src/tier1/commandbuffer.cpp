@@ -11,9 +11,6 @@
 #include "tier1/utlbuffer.h"
 #include "tier1/strtools.h"
 
-// memdbgon must be the last include file in a .cpp file!!!
-#include "tier0/memdbgon.h"
-
 #define	MAX_ALIAS_NAME	32
 #define MAX_COMMAND_LENGTH 1024
 

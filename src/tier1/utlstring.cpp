@@ -10,10 +10,6 @@
 #include "tier1/utlstring.h"
 #include "tier1/strtools.h"
 #include "tier1/utlvector.h"
-#include <ctype.h>
-
-// NOTE: This has to be the last file included!
-#include "tier0/memdbgon.h"
 
 static const int64 k_nMillion = 1000000;
 

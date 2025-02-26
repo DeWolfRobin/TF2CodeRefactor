@@ -15,15 +15,11 @@
 #undef PROTECTED_THINGS_ENABLE // from protected_things.h
 #endif
 
-#include <stdio.h>
 #include "interface.h"
 #include "basetypes.h"
 #include "tier0/dbg.h"
-#include <string.h>
-#include <stdlib.h>
 #include "tier1/strtools.h"
 #include "tier0/icommandline.h"
-#include "tier0/dbg.h"
 #include "tier0/threadtools.h"
 #ifdef _WIN32
 #include <direct.h> // getcwd
@@ -35,10 +31,6 @@
 #if defined( _X360 )
 #include "xbox/xbox_win32stubs.h"
 #endif
-
-
-// memdbgon must be the last include file in a .cpp file!!!
-#include "tier0/memdbgon.h"
 
 // ------------------------------------------------------------------------------------ //
 // InterfaceReg.

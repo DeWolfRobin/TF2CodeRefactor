@@ -26,7 +26,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <algorithm>
 #ifdef _WIN32
 #pragma warning(disable:4530) // warning C4530: C++ exception handler used, but unwind semantics are not enabled. Specify /EHsc
 #endif //_WIN32

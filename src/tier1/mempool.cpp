@@ -5,15 +5,8 @@
 //===========================================================================//
 
 #include "mempool.h"
-#include <stdio.h>
 #include <malloc.h>
-#include <memory.h>
 #include "tier0/dbg.h"
-#include <ctype.h>
-#include "tier1/strtools.h"
-
-// Should be last include
-#include "tier0/memdbgon.h"
  
 MemoryPoolReportFunc_t CUtlMemoryPool::g_ReportFunc = 0;
 
