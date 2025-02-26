@@ -1,7 +1,7 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Low level byte swapping routines.
-//
+// 
 // $NoKeywords: $
 //=============================================================================
 
@@ -10,81 +10,83 @@
 //-----------------------------------------------------------------------------
 // Copy a single field from the input buffer to the output buffer, swapping the bytes if necessary
 //-----------------------------------------------------------------------------
-void CByteswap::SwapFieldToTargetEndian( void* pOutputBuffer, void *pData, typedescription_t *pField )
+void CByteswap::SwapFieldToTargetEndian(void* pOutputBuffer, void* pData, typedescription_t* pField)
 {
-	switch ( pField->fieldType )
+	switch (pField->fieldType)
 	{
 	case FIELD_CHARACTER:
-		SwapBufferToTargetEndian<char>( (char*)pOutputBuffer, (char*)pData, pField->fieldSize );
+		SwapBufferToTargetEndian<char>(static_cast<char*>(pOutputBuffer), static_cast<char*>(pData), pField->fieldSize);
 		break;
 
 	case FIELD_BOOLEAN:
-		SwapBufferToTargetEndian<bool>( (bool*)pOutputBuffer, (bool*)pData, pField->fieldSize );
+		SwapBufferToTargetEndian<bool>(static_cast<bool*>(pOutputBuffer), static_cast<bool*>(pData), pField->fieldSize);
 		break;
 
 	case FIELD_SHORT:
-		SwapBufferToTargetEndian<short>( (short*)pOutputBuffer, (short*)pData, pField->fieldSize );
+		SwapBufferToTargetEndian<short>(static_cast<short*>(pOutputBuffer), static_cast<short*>(pData), pField->fieldSize);
 		break;
 
 	case FIELD_FLOAT:
-		SwapBufferToTargetEndian<uint>( (uint*)pOutputBuffer, (uint*)pData, pField->fieldSize );
+		// Swap floats by treating them as uints
+		SwapBufferToTargetEndian<uint>(static_cast<uint*>(pOutputBuffer), static_cast<uint*>(pData), pField->fieldSize);
 		break;
 
 	case FIELD_INTEGER:
-		SwapBufferToTargetEndian<int>( (int*)pOutputBuffer, (int*)pData, pField->fieldSize );
+		SwapBufferToTargetEndian<int>(static_cast<int*>(pOutputBuffer), static_cast<int*>(pData), pField->fieldSize);
 		break;
 
 	case FIELD_VECTOR:
-		SwapBufferToTargetEndian<uint>( (uint*)pOutputBuffer, (uint*)pData, pField->fieldSize * 3 );
+		SwapBufferToTargetEndian<uint>(static_cast<uint*>(pOutputBuffer), static_cast<uint*>(pData), pField->fieldSize * 3);
 		break;
 
 	case FIELD_VECTOR2D:
-		SwapBufferToTargetEndian<uint>( (uint*)pOutputBuffer, (uint*)pData, pField->fieldSize * 2 );
+		SwapBufferToTargetEndian<uint>(static_cast<uint*>(pOutputBuffer), static_cast<uint*>(pData), pField->fieldSize * 2);
 		break;
 
 	case FIELD_QUATERNION:
-		SwapBufferToTargetEndian<uint>( (uint*)pOutputBuffer, (uint*)pData, pField->fieldSize * 4 );
+		SwapBufferToTargetEndian<uint>(static_cast<uint*>(pOutputBuffer), static_cast<uint*>(pData), pField->fieldSize * 4);
 		break;
 
 	case FIELD_EMBEDDED:
+	{
+		// Use local pointers so we don't modify the caller's pointer.
+		typedescription_t* pEmbed = pField->td->dataDesc;
+		BYTE* pOut = static_cast<BYTE*>(pOutputBuffer);
+		BYTE* pIn = static_cast<BYTE*>(pData);
+		for (int i = 0; i < pField->fieldSize; ++i)
 		{
-			typedescription_t *pEmbed = pField->td->dataDesc;
-			for ( int i = 0; i < pField->fieldSize; ++i )
-			{
-				SwapFieldsToTargetEndian( (byte*)pOutputBuffer + pEmbed->fieldOffset[ TD_OFFSET_NORMAL ], 
-										(byte*)pData + pEmbed->fieldOffset[ TD_OFFSET_NORMAL ],  
-										pField->td );
-
-				pOutputBuffer = (byte*)pOutputBuffer + pField->fieldSizeInBytes;
-				pData = (byte*)pData + pField->fieldSizeInBytes;
-			}
+			SwapFieldsToTargetEndian(pOut + pEmbed->fieldOffset[TD_OFFSET_NORMAL],
+				pIn + pEmbed->fieldOffset[TD_OFFSET_NORMAL],
+				pField->td);
+			pOut += pField->fieldSizeInBytes;
+			pIn += pField->fieldSizeInBytes;
 		}
-		break;
-		
+	}
+	break;
+
 	default:
-		assert(0); 
+		assert(0);
 	}
 }
 
 //-----------------------------------------------------------------------------
-// Write a block of fields. Works a bit like the saverestore code.  
+// Write a block of fields. Works a bit like the saverestore code.
 //-----------------------------------------------------------------------------
-void CByteswap::SwapFieldsToTargetEndian( void *pOutputBuffer, void *pBaseData, datamap_t *pDataMap )
-{	
-	// deal with base class first
-	if ( pDataMap->baseMap )
+void CByteswap::SwapFieldsToTargetEndian(void* pOutputBuffer, void* pBaseData, datamap_t* pDataMap)
+{
+	// Deal with base class first.
+	if (pDataMap->baseMap)
 	{
-		SwapFieldsToTargetEndian( pOutputBuffer, pBaseData, pDataMap->baseMap );
+		SwapFieldsToTargetEndian(pOutputBuffer, pBaseData, pDataMap->baseMap);
 	}
 
-	typedescription_t *pFields = pDataMap->dataDesc;
+	typedescription_t* pFields = pDataMap->dataDesc;
 	int fieldCount = pDataMap->dataNumFields;
-	for ( int i = 0; i < fieldCount; ++i )
+	for (int i = 0; i < fieldCount; ++i)
 	{
-		typedescription_t *pField = &pFields[i];
-		SwapFieldToTargetEndian( (BYTE*)pOutputBuffer + pField->fieldOffset[ TD_OFFSET_NORMAL ],  
-								 (BYTE*)pBaseData + pField->fieldOffset[ TD_OFFSET_NORMAL ], 
-								  pField );
+		typedescription_t* pField = &pFields[i];
+		SwapFieldToTargetEndian(static_cast<BYTE*>(pOutputBuffer) + pField->fieldOffset[TD_OFFSET_NORMAL],
+			static_cast<BYTE*>(pBaseData) + pField->fieldOffset[TD_OFFSET_NORMAL],
+			pField);
 	}
 }
-
