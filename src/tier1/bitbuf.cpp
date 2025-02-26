@@ -1,7 +1,8 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Bit-level writing/reading routines. Refactored for speed, clarity,
-//          and to remove potential memory leaks and vulnerabilities.
+//          and to remove potential memory leaks and vulnerabilities. This version
+//          also integrates improvements from a newer Bitbuf implementation.
 // 
 //=============================================================================
 
@@ -11,7 +12,10 @@
 #include "mathlib/mathlib.h"
 #include "tier1/strtools.h"
 #include "bitvec.h"
+#include <sstream>
+#include <vector>
 
+// Fast bit-scan functions:
 #if _WIN32
 #define FAST_BIT_SCAN 1
 #if _X360
@@ -46,6 +50,7 @@ inline unsigned int CountTrailingZeros(unsigned int x)
 #define FAST_BIT_SCAN 0
 #endif
 
+// Global error handler:
 static BitBufErrorHandler g_BitBufErrorHandler = nullptr;
 
 inline int BitForBitnum(int bitnum)
@@ -64,6 +69,7 @@ void SetBitBufErrorHandler(BitBufErrorHandler fn)
 	g_BitBufErrorHandler = fn;
 }
 
+// Global precalculated masks:
 uint32 g_LittleBits[32];
 uint32 g_BitWriteMasks[32][33];
 uint32 g_ExtraMasks[33];
@@ -92,9 +98,114 @@ public:
 };
 static CBitWriteMasksInit g_BitWriteMasksInit;
 
-// ----------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// New Bitbuf class (using std::vector) with modern routines
+// -----------------------------------------------------------------------------
+
+namespace {
+	typedef unsigned char byte;
+	// Helper: set_bit – sets or clears the bit at position 'pos' in n.
+	inline void set_bit(byte& n, int pos, int set)
+	{
+		unsigned mask = 0x01 << pos;
+		if (set)
+			n |= mask;
+		else
+			n &= ~mask;
+	}
+}
+
+class Bitbuf
+{
+public:
+	Bitbuf() : len(0) {}
+	Bitbuf(const std::string& s) : Bitbuf() {
+		std::string word;
+		std::istringstream iss(s);
+		while (iss >> word)
+			append_binary_str(word);
+	}
+
+	// Reserve enough space for n bits.
+	void reserve(size_t n) {
+		buf.reserve(byte_count(n));
+	}
+
+	// Push a single bit.
+	void push_back(bool bit) {
+		size_t byte_pos = len / 8;
+		int bit_pos = 7 - (len % 8);
+		if (len == capacity())
+			buf.push_back(0);
+		set_bit(buf[byte_pos], bit_pos, bit);
+		len++;
+	}
+
+	// Append a full byte (optimally merging with the current partially filled byte).
+	void append_byte(byte u8) {
+		int quot = len / 8;
+		int mod = len % 8;
+		if (mod == 0) {
+			buf.push_back(u8);
+			len += 8;
+			return;
+		}
+		byte tail = buf[quot] >> (8 - mod) << (8 - mod);
+		byte fill = u8 >> mod;
+		byte rest = u8 << (8 - mod);
+		buf[quot] = tail | fill;
+		buf.push_back(rest);
+		len += 8;
+	}
+
+	// Append bits from another Bitbuf between start and end.
+	void append(const Bitbuf& ba, size_t start, size_t end) {
+		size_t gap = end - start;
+		if (len % 8 == 0 && start % 8 == 0) {
+			buf.insert(buf.end(), ba.buf.begin() + (start / 8),
+				ba.buf.begin() + (start / 8 + byte_count(gap)));
+			len += gap;
+			return;
+		}
+		reserve(len + gap);
+		size_t old_len = len;
+		for (size_t i = 0; i < byte_count(gap); i++) {
+			byte b = byte_at_pos_offset(start / 8 + i, start % 8);
+			append_byte(b);
+		}
+		len = old_len + gap;
+	}
+
+	// Retrieve a byte at a given position with an offset.
+	byte byte_at_pos_offset(size_t pos, int offset) const {
+		if (offset == 0)
+			return buf[pos];
+		byte ret = buf[pos] << offset;
+		if (pos + 1 < buf.size())
+			ret |= (buf[pos + 1] >> (8 - offset));
+		return ret;
+	}
+
+	size_t size_in_bits() const { return len; }
+	size_t capacity() const { return buf.size() * 8; }
+	size_t byte_count(size_t bits) const { return (bits + 7) / 8; }
+
+private:
+	std::vector<byte> buf;
+	size_t len; // length in bits
+
+	// Helper: append binary string (skips "0b" prefix if present)
+	void append_binary_str(const std::string& s) {
+		size_t start = (s.compare(0, 2, "0b") == 0) ? 2 : 0;
+		for (size_t i = start; i < s.size(); i++) {
+			push_back(s[i] - '0');
+		}
+	}
+};
+
+// -----------------------------------------------------------------------------
 // bf_write Implementation
-// ----------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
 bf_write::bf_write()
 {
@@ -129,9 +240,7 @@ void bf_write::StartWriting(void* pData, int nBytes, int iStartBit, int nBits)
 	m_pData = (uint32*)pData;
 	m_nDataBytes = nBytes;
 	if (nBits == -1)
-	{
 		m_nDataBits = nBytes << 3;
-	}
 	else
 	{
 		Assert(nBits <= nBytes * 8);
@@ -250,18 +359,12 @@ void bf_write::WriteVarInt64(uint64 data)
 		if (part2 == 0)
 		{
 			if (part1 == 0)
-			{
 				size = (part0 < (1 << 7)) ? 1 : 2;
-			}
 			else
-			{
 				size = (part1 < (1 << 7)) ? 5 : ((part1 < (1 << 14)) ? 6 : ((part1 < (1 << 21)) ? 7 : 8));
-			}
 		}
 		else
-		{
 			size = (part2 < (1 << 7)) ? 9 : 10;
-		}
 		switch (size)
 		{
 		case 10: target[9] = (uint8)((part2 >> 7) | 0x80);
@@ -434,7 +537,7 @@ void bf_write::WriteBitCoordMP(const float f, bool bIntegral, bool bLowPrecision
 	int fractVal = bLowPrecision ?
 		(abs((int)(f * COORD_DENOMINATOR_LOWPRECISION)) & ((int)COORD_DENOMINATOR_LOWPRECISION - 1)) :
 		(abs((int)(f * COORD_DENOMINATOR)) & ((int)COORD_DENOMINATOR - 1));
-	bool bInBounds = (intVal < (1 << (bInBounds ? COORD_INTEGER_BITS_MP : COORD_INTEGER_BITS))); // assuming macros are integral
+	bool bInBounds = (intVal < (1 << (bInBounds ? COORD_INTEGER_BITS_MP : COORD_INTEGER_BITS))); // Note: ensure macros yield integral values.
 	unsigned int bits, numbits;
 	if (bIntegral)
 	{
@@ -520,19 +623,15 @@ void bf_write::WriteBitNormal(float f)
 	WriteUBitLong(fractVal, NORMAL_FRACTIONAL_BITS);
 }
 
-// Updated: WriteBitVec3Normal now takes a const Vector& as declared in bitbuf.h.
 void bf_write::WriteBitVec3Normal(const Vector& fa)
 {
-	// For simplicity, we encode each normal component using WriteBitNormal.
 	WriteBitNormal(fa.x);
 	WriteBitNormal(fa.y);
 	WriteBitNormal(fa.z);
 }
 
-// Updated: WriteBitAngles now takes a const QAngle& as declared.
 void bf_write::WriteBitAngles(const QAngle& fa)
 {
-	// For now, simply treat QAngle as a Vector and call WriteBitVec3Coord.
 	WriteBitVec3Coord(Vector(fa.x, fa.y, fa.z));
 }
 
