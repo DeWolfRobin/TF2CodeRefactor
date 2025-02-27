@@ -22,7 +22,7 @@ This repository contains the **refactored and optimized** version of the **Sourc
 Use the following command to download the repository:
 
 ```sh
-git clone https://github.com/ValveSoftware/source-sdk-2013
+git clone https://github.com/DeWolfRobin/TF2CodeRefactor
 ```
 
 ---
